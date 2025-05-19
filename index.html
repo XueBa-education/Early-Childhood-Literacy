@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>Find the Letter</title>
+    <style>
+        /* 原有样式保持不变 */
+        body { background-color: #e8f5e9; display: flex; flex-direction: column; align-items: center; margin: 0; min-height: 100vh; font-family: "华文细黑", sans-serif; }
+        h1 { color: #2e7d32; margin: 20px 0; }
+        #levelInfo { font-size: 24px; color: #1b5e20; margin: 10px 0; }
+        #gameBoard { display: grid; grid-template-columns: repeat(10, 1fr); gap: 15px; padding: 20px; max-width: 1000px; }
+        .bubble { width: 60px; height: 60px; background: rgba(255, 255, 255, 0.8); border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 30px; cursor: pointer; box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2); transition: all 0.3s; border: 2px solid #fff; }
+        .bubble:hover { transform: scale(1.1); }
+        .wrong { animation: shake 0.5s; }
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-10px); } 75% { transform: translateX(10px); } }
+        .firework { position: absolute; width: 10px; height: 10px; background: #ffeb3b; border-radius: 50%; animation: explode 0.5s ease-out; }
+        @keyframes explode { 0% { transform: scale(1); } 100% { transform: scale(3); opacity: 0; } }
+        #message { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 40px; color: #d32f2f; background: rgba(255, 255, 255, 0.9); padding: 20px 40px; border-radius: 10px; display: none; }
+        #finalMessage { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 50px; color: #d32f2f; background: rgba(255, 255, 255, 0.9); padding: 30px 60px; border-radius: 15px; text-shadow: 2px 2px 4px rgba(0,0,0,0.2); display: none; }
+
+        /* 新增关卡选择样式 */
+        #levelSelector {
+            display: grid;
+            grid-template-columns: repeat(13, 1fr);
+            gap: 8px;
+            margin: 15px 0;
+            max-width: 1000px;
+        }
+        .level-btn {
+            padding: 8px 12px;
+            background: #81c784;
+            border: none;
+            border-radius: 20px;
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .level-btn:hover {
+            background: #4caf50;
+            transform: scale(1.05);
+        }
+        .level-btn.current {
+            background: #2e7d32;
+            transform: scale(1.1);
+        }
+    </style>
+</head>
+<body>
+    <h1>Find the Letter</h1>
+    <div id="levelSelector"></div>
+    <div id="levelInfo"></div>
+    <div id="gameBoard"></div>
+    <div id="message">恭喜你挑战成功!</div>
+    <div id="finalMessage">全部通关! 你是最棒的!</div>
+
+    <audio id="correctSound" src="correct.mp3"></audio>
+    <audio id="wrongSound" src="wrong.mp3"></audio>
+    <audio id="successSound" src="success.mp3"></audio>
+
+    <script>
+        let currentLevel = 1;
+        let remainingTarget = 0;
+
+        // 初始化关卡选择器
+        function initLevelSelector() {
+            const container = document.getElementById('levelSelector');
+            for (let i = 1; i <= 26; i++) {
+                const btn = document.createElement('button');
+                btn.className = 'level-btn';
+                btn.textContent = String.fromCharCode(64 + i) + String.fromCharCode(96 + i);
+                btn.dataset.level = i;
+                btn.addEventListener('click', () => selectLevel(i));
+                container.appendChild(btn);
+            }
+        }
+
+        // 选择关卡
+        function selectLevel(level) {
+            currentLevel = level;
+            updateLevelButtons();
+            initGame();
+        }
+
+        // 更新按钮状态
+        function updateLevelButtons() {
+            document.querySelectorAll('.level-btn').forEach(btn => {
+                btn.classList.toggle('current', parseInt(btn.dataset.level) === currentLevel);
+            });
+        }
+
+        // 游戏初始化
+        function initGame() {
+            const targetChar = String.fromCharCode(96 + currentLevel);
+            document.getElementById('levelInfo').textContent = `当前关卡：${targetChar.toUpperCase()}${targetChar}`;
+
+            // 生成字母
+            const letters = [];
+            // 目标字母（大小写各15个）
+            for (let i = 0; i < 15; i++) {
+                letters.push(targetChar.toUpperCase());
+                letters.push(targetChar);
+            }
+            // 其他随机字母
+            while (letters.length < 50) {
+                const randomChar = String.fromCharCode(97 + Math.floor(Math.random() * 26));
+                if (randomChar !== targetChar) {
+                    letters.push(Math.random() > 0.5 ? randomChar.toUpperCase() : randomChar);
+                }
+            }
+            letters.sort(() => Math.random() - 0.5);
+
+            // 创建泡泡
+            const gameBoard = document.getElementById('gameBoard');
+            gameBoard.innerHTML = '';
+            
+            letters.forEach(char => {
+                const bubble = document.createElement('div');
+                bubble.className = 'bubble';
+                bubble.textContent = char;
+                bubble.dataset.char = char;
+                bubble.addEventListener('click', handleClick);
+                gameBoard.appendChild(bubble);
+            });
+
+            remainingTarget = letters.filter(c => c.toLowerCase() === targetChar).length;
+        }
+
+        // 点击处理
+        function handleClick(e) {
+            const bubble = e.target;
+            const currentChar = bubble.dataset.char.toLowerCase();
+            const targetChar = String.fromCharCode(96 + currentLevel);
+
+            if (currentChar === targetChar) {
+                playSound('correct');
+                createFireworks(bubble);
+                bubble.remove();
+                remainingTarget--;
+
+                if (remainingTarget === 0) {
+                    if (currentLevel === 26) {
+                        document.getElementById('finalMessage').style.display = 'block';
+                        playSound('success');
+                    } else {
+                        document.getElementById('message').style.display = 'block';
+                        playSound('success');
+                        setTimeout(() => {
+                            document.getElementById('message').style.display = 'none';
+                            selectLevel(currentLevel + 1); // 自动进入下一关
+                        }, 1500);
+                    }
+                }
+            } else {
+                playSound('wrong');
+                bubble.classList.add('wrong');
+                setTimeout(() => bubble.classList.remove('wrong'), 500);
+            }
+        }
+
+        // 音效播放
+        function playSound(type) {
+            const sounds = {
+                correct: document.getElementById('correctSound'),
+                wrong: document.getElementById('wrongSound'),
+                success: document.getElementById('successSound')
+            };
+            sounds[type].currentTime = 0;
+            sounds[type].play();
+        }
+
+        // 烟花效果
+        function createFireworks(element) {
+            const rect = element.getBoundingClientRect();
+            for (let i = 0; i < 8; i++) {
+                const firework = document.createElement('div');
+                firework.className = 'firework';
+                firework.style.left = (rect.left + 25) + 'px';
+                firework.style.top = (rect.top + 25) + 'px';
+                document.body.appendChild(firework);
+                setTimeout(() => firework.remove(), 500);
+            }
+        }
+
+        // 初始化游戏
+        initLevelSelector();
+        selectLevel(1); // 默认从第一关开始
+    </script>
+</body>
+</html>
